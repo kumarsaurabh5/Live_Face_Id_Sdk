@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Face Verification</title>
+    <style>
+        .container {
+            text-align: center;
+            margin-top: 50px;
+        }
+        .buttons {
+            margin-top: 20px;
+        }
+        img {
+            max-width: 200px;
+            margin: 10px;
+        }
+    </style>
+    <script>
+        function captureImage() {
+            fetch('/save_capture_image')
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        document.getElementById('captured-image').src = data.image_url;
+                    } else {
+                        alert('Failed to capture image.');
+                    }
+                });
+        }
+    </script>
+</head>
+<body>
+    <div class="container">
+        <h1>Face Verification System</h1>
+        <div class="buttons">
+            <button onclick="captureImage()">Capture Image</button>
+            <button onclick="location.href='/liveliness_detection'">Liveliness Detection</button>
+            <button onclick="location.href='/match_face'">Match Face</button>
+            <button onclick="location.href='/clear'">Clear</button>
+        </div>
+        <div>
+            <h3>Captured Image</h3>
+            <img id="captured-image" src="{{ captured_images['capture'] }}" alt="Captured Image">
+        </div>
+        <div>
+            <h3>Liveliness Image</h3>
+            <img src="{{ captured_images['liveliness'] }}" alt="Liveliness Image">
+        </div>
+        <h2>Status: {{ verification_status }}</h2>
+        {% if percentage_match %}
+            <h2>Percentage Match: {{ percentage_match }}%</h2>
+        {% endif %}
+    </div>
+</body>
+</html>
