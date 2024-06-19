@@ -1,6 +1,6 @@
 flask
 opencv-python
-dlib
+dlib-19.24.1-cp311-cp311-win_amd64.whl
 numpy
 face_recognition
 mediapipe
