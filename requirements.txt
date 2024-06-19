@@ -1,6 +1,6 @@
 flask
 opencv-python
-dlib
+dlib==19.24.1
 cmake
 numpy
 face_recognition
