@@ -1,6 +1,7 @@
 flask
 opencv-python
 dlib
+cmake
 numpy
 face_recognition
 mediapipe
