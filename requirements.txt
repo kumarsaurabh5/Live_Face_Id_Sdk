@@ -4,4 +4,3 @@ dlib
 numpy
 face_recognition
 mediapipe
-os
