@@ -1,0 +1,8 @@
+flask
+cv2
+dlib
+numpy
+face_recognition
+time
+mediapipe
+os
