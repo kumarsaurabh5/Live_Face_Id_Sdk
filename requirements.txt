@@ -3,6 +3,5 @@ opencv-python
 dlib
 numpy
 face_recognition
-time
 mediapipe
 os
