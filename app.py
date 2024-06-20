@@ -9,8 +9,7 @@ import os
 
 app = Flask(__name__)
 
-# Initialize the video capture object
-video_capture = cv2.VideoCapture(0)  # Use 0 for the default camera
+video_capture = cv2.VideoCapture(0)  
 
 def reset_video_capture():
     global video_capture
@@ -22,19 +21,17 @@ def reset_video_capture():
 
 reset_video_capture()
 
-# Load the dlib face detector and facial landmark predictor
 detector = dlib.get_frontal_face_detector()
 predictor = dlib.shape_predictor("shape_predictor_68_face_landmarks.dat")
 
-# Initialize Mediapipe Hand model
+
 mp_hands = mp.solutions.hands
 hands = mp_hands.Hands(static_image_mode=False, max_num_hands=1, min_detection_confidence=0.5)
 
-# Define global variables for instructions and status
 current_instruction = "Please blink your eyes."
 status = "Awaiting action"
-verification_status = None  # None means the test hasn't been done yet
-stop_video_feed = False  # To control the video feed
+verification_status = None  
+stop_video_feed = False 
 blink_verified = False
 hand_verified = False
 head_movement_verified = False
@@ -47,14 +44,10 @@ def save_image(image, image_type):
     captured_images[image_type] = path
 
 def eye_aspect_ratio(eye):
-    # Compute the euclidean distances between the two sets of vertical eye landmarks
     A = np.linalg.norm(eye[1] - eye[5])
     B = np.linalg.norm(eye[2] - eye[4])
-
-    # Compute the euclidean distance between the horizontal eye landmark
     C = np.linalg.norm(eye[0] - eye[3])
 
-    # Compute the eye aspect ratio
     ear = (A + B) / (2.0 * C)
     return ear
 
@@ -66,7 +59,7 @@ def detect_hand(frame):
     return False
 
 def detect_head_movement(frame, previous_landmarks, current_landmarks):
-    movement_threshold = 20  # Define a threshold for head movement
+    movement_threshold = 20  
     if previous_landmarks is None:
         return False
     movement = np.linalg.norm(current_landmarks - previous_landmarks)
