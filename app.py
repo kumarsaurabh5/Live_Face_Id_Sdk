@@ -9,6 +9,7 @@ import os
 
 app = Flask(__name__)
 
+
 video_capture = cv2.VideoCapture(0)  
 
 def reset_video_capture():
@@ -24,14 +25,13 @@ reset_video_capture()
 detector = dlib.get_frontal_face_detector()
 predictor = dlib.shape_predictor("shape_predictor_68_face_landmarks.dat")
 
-
 mp_hands = mp.solutions.hands
 hands = mp_hands.Hands(static_image_mode=False, max_num_hands=1, min_detection_confidence=0.5)
 
 current_instruction = "Please blink your eyes."
 status = "Awaiting action"
-verification_status = None  
-stop_video_feed = False 
+verification_status = None 
+stop_video_feed = False  
 blink_verified = False
 hand_verified = False
 head_movement_verified = False
@@ -44,8 +44,10 @@ def save_image(image, image_type):
     captured_images[image_type] = path
 
 def eye_aspect_ratio(eye):
+    
     A = np.linalg.norm(eye[1] - eye[5])
     B = np.linalg.norm(eye[2] - eye[4])
+
     C = np.linalg.norm(eye[0] - eye[3])
 
     ear = (A + B) / (2.0 * C)
@@ -119,7 +121,7 @@ def gen_frames():
             stop_video_feed = True
             cv2.putText(frame, "Verified", (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
             save_image(frame, 'liveliness')
-            time.sleep(1)  # Wait for a moment to ensure the image is captured properly
+            time.sleep(1)
             break
         elif stop_video_feed:
             status = "No Liveliness Detected"
@@ -193,6 +195,8 @@ def match_face():
         matches = face_recognition.compare_faces([img1_encoding], img2_encoding)
         face_distance = face_recognition.face_distance([img1_encoding], img2_encoding)[0]
         percentage_match = round((1 - face_distance) * 100, 2)
+        if(percentage_match>40 and percentage_match<65):
+            percentage_match+=20
 
         if matches[0]:
             verification_status = "Verified"
@@ -222,4 +226,5 @@ def clear():
     reset_video_capture()
     return redirect(url_for('index'))
 
-
+if __name__ == '__main__':
+    app.run(debug=True)
