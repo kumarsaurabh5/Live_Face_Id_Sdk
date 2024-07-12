@@ -27,7 +27,7 @@ The Face Verification System is a web application designed to ensure user identi
 
 1. **Clone the repository**:
    ```bash
-   git clone https://github.com/your-repo/face-verification-system.git
+   git clone https://github.com/kumarsaurabh5/Live_Face_Id_Sdk-verification-system.git
    cd face-verification-system
    ```
 
