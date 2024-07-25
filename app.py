@@ -9,7 +9,6 @@ import os
 
 app = Flask(__name__)
 
-
 video_capture = cv2.VideoCapture(0)  
 
 def reset_video_capture():
@@ -57,174 +56,173 @@ def detect_hand(frame):
     rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
     results = hands.process(rgb_frame)
     if results.multi_hand_landmarks:
+        for hand_landmarks in results.multi_hand_landmarks:
+            mp.solutions.drawing_utils.draw_landmarks(frame, hand_landmarks, mp_hands.HAND_CONNECTIONS)
         return True
     return False
 
-def detect_head_movement(frame, previous_landmarks, current_landmarks):
-    movement_threshold = 20  
-    if previous_landmarks is None:
-        return False
-    movement = np.linalg.norm(current_landmarks - previous_landmarks)
-    return movement > movement_threshold
+def detect_head_movement(previous_landmarks, current_landmarks):
+    previous_points = np.array([[p.x, p.y] for p in previous_landmarks.parts()])
+    current_points = np.array([[p.x, p.y] for p in current_landmarks.parts()])
+    displacement = np.linalg.norm(current_points - previous_points, axis=1).mean()
+    return displacement > 0.01
 
-def gen_frames():
-    global status, verification_status, stop_video_feed, blink_verified, hand_verified, head_movement_verified, current_instruction
+@app.route('/')
+def index():
+    global captured_images, verification_status, percentage_match
+    return render_template('index.html', captured_images=captured_images, verification_status=verification_status, percentage_match=percentage_match)
+
+@app.route('/save_capture_image')
+def save_capture_image():
+    global captured_images
+    success, frame = video_capture.read()
+    if success:
+        save_image(frame, 'capture')
+        return jsonify({'success': True, 'image_url': captured_images['capture']})
+    return jsonify({'success': False})
+
+@app.route('/liveliness_detection')
+def liveliness_detection():
+    global current_instruction, status
+    current_instruction = "Please blink your eyes."
+    status = "Awaiting action"
+    return render_template('liveliness.html', current_instruction=current_instruction, status=status)
+
+@app.route('/video_feed')
+def video_feed():
+    return Response(gen(), mimetype='multipart/x-mixed-replace; boundary=frame')
+
+def gen():
+    global current_instruction, status, stop_video_feed, blink_verified, hand_verified, head_movement_verified, captured_images, video_capture
+
+    blink_threshold = 0.25
+    consecutive_frames = 3
+    blink_counter = 0
+
     previous_landmarks = None
+    start_time = time.time()
 
     while True:
         success, frame = video_capture.read()
         if not success:
-            print("Failed to capture image")
-            continue
-
-        if frame is None:
-            print("No frame captured")
-            continue
+            break
 
         gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
         faces = detector(gray)
-        
+
         for face in faces:
             landmarks = predictor(gray, face)
-            landmarks = np.array([(p.x, p.y) for p in landmarks.parts()])
-
-            left_eye = landmarks[36:42]
-            right_eye = landmarks[42:48]
+            left_eye = np.array([(landmarks.part(36).x, landmarks.part(36).y),
+                                 (landmarks.part(37).x, landmarks.part(37).y),
+                                 (landmarks.part(38).x, landmarks.part(38).y),
+                                 (landmarks.part(39).x, landmarks.part(39).y),
+                                 (landmarks.part(40).x, landmarks.part(40).y),
+                                 (landmarks.part(41).x, landmarks.part(41).y)], np.int32)
+            right_eye = np.array([(landmarks.part(42).x, landmarks.part(42).y),
+                                  (landmarks.part(43).x, landmarks.part(43).y),
+                                  (landmarks.part(44).x, landmarks.part(44).y),
+                                  (landmarks.part(45).x, landmarks.part(45).y),
+                                  (landmarks.part(46).x, landmarks.part(46).y),
+                                  (landmarks.part(47).x, landmarks.part(47).y)], np.int32)
 
             left_ear = eye_aspect_ratio(left_eye)
             right_ear = eye_aspect_ratio(right_eye)
-
             ear = (left_ear + right_ear) / 2.0
 
-            if not blink_verified:
-                if ear < 0.21:
+            if ear < blink_threshold:
+                blink_counter += 1
+            else:
+                if blink_counter >= consecutive_frames:
                     blink_verified = True
-                    current_instruction = "Please raise your right hand."
-                break
+                blink_counter = 0
 
-            if blink_verified and not hand_verified:
-                if detect_hand(frame):
-                    hand_verified = True
-                    current_instruction = "Please move your head."
-                break
+            if current_instruction == "Please blink your eyes." and blink_verified:
+                current_instruction = "Please raise your right hand."
+                status = "Awaiting action"
 
-            if blink_verified and hand_verified and not head_movement_verified:
-                if detect_head_movement(frame, previous_landmarks, landmarks):
-                    head_movement_verified = True
-                    current_instruction = "Liveliness check complete."
+            if current_instruction == "Please raise your right hand." and detect_hand(frame):
+                hand_verified = True
+
+            if current_instruction == "Please raise your right hand." and hand_verified:
+                current_instruction = "Please move your head."
+                status = "Awaiting action"
                 previous_landmarks = landmarks
-                break
 
-        if blink_verified and hand_verified and head_movement_verified:
-            status = "Live Person Detected"
-            verification_status = True
-            stop_video_feed = True
-            cv2.putText(frame, "Verified", (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
-            save_image(frame, 'liveliness')
-            time.sleep(1)
-            break
-        elif stop_video_feed:
-            status = "No Liveliness Detected"
-            verification_status = False
-            cv2.putText(frame, "Not Live", (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 255), 2)
-            break
+            if current_instruction == "Please move your head." and previous_landmarks:
+                if detect_head_movement(previous_landmarks, landmarks):
+                    head_movement_verified = True
 
-        ret, buffer = cv2.imencode('.jpg', frame)
-        if not ret:
-            print("Failed to encode frame")
-            continue
+            if current_instruction == "Please move your head." and head_movement_verified:
+                stop_video_feed = True
+                save_image(frame, 'liveliness')
+                status = "Liveliness Verified"
+                return redirect('/')
 
-        frame = buffer.tobytes()
+        ret, jpeg = cv2.imencode('.jpg', frame)
+        frame = jpeg.tobytes()
         yield (b'--frame\r\n'
-               b'Content-Type: image/jpeg\r\n\r\n' + frame + b'\r\n')
+               b'Content-Type: image/jpeg\r\n\r\n' + frame + b'\r\n\r\n')
 
-@app.route('/video_feed')
-def video_feed():
-    global stop_video_feed, blink_verified, hand_verified, head_movement_verified
-    stop_video_feed = False
-    blink_verified = False
-    hand_verified = False
-    head_movement_verified = False
-    return Response(gen_frames(), mimetype='multipart/x-mixed-replace; boundary=frame')
-
-@app.route('/')
-def index():
-    return render_template('index.html', captured_images=captured_images, verification_status=verification_status, percentage_match=percentage_match)
-
-@app.route('/reset', methods=['POST'])
-def reset():
-    global verification_status, status, stop_video_feed, blink_verified, hand_verified, head_movement_verified, captured_images, current_instruction, percentage_match
-    verification_status = None
-    status = "Awaiting action"
-    stop_video_feed = False
-    blink_verified = False
-    hand_verified = False
-    head_movement_verified = False
-    captured_images = {'capture': None, 'liveliness': None}
-    current_instruction = "Please blink your eyes."
-    percentage_match = None
-    reset_video_capture()
-    return jsonify({"success": True})
-
-@app.route('/liveliness_detection')
-def liveliness_detection():
-    return render_template('liveliness.html', current_instruction=current_instruction, status=status, verification_status=verification_status)
-
-@app.route('/save_capture_image')
-def save_capture_image():
-    success, frame = video_capture.read()
-    if success:
-        save_image(frame, 'capture')
-        return jsonify({"success": True, "image_url": captured_images['capture']})
-    return jsonify({"success": False})
+        if stop_video_feed:
+            break
 
 @app.route('/match_face')
 def match_face():
-    global verification_status, percentage_match
-    if not captured_images['capture'] or not captured_images['liveliness']:
-        verification_status = "Please upload the photos"
-        return redirect(url_for('index'))
+    global captured_images, verification_status, percentage_match
 
-    img1 = face_recognition.load_image_file(captured_images['capture'])
-    img2 = face_recognition.load_image_file(captured_images['liveliness'])
+    if captured_images['capture'] and captured_images['liveliness']:
+        capture_image = face_recognition.load_image_file(captured_images['capture'])
+        liveliness_image = face_recognition.load_image_file(captured_images['liveliness'])
 
-    try:
-        img1_encoding = face_recognition.face_encodings(img1)[0]
-        img2_encoding = face_recognition.face_encodings(img2)[0]
+        capture_encoding = face_recognition.face_encodings(capture_image)[0]
+        liveliness_encoding = face_recognition.face_encodings(liveliness_image)[0]
 
-        matches = face_recognition.compare_faces([img1_encoding], img2_encoding)
-        face_distance = face_recognition.face_distance([img1_encoding], img2_encoding)[0]
-        percentage_match = round((1 - face_distance) * 100, 2)
-        if(percentage_match>40 and percentage_match<65):
-            percentage_match+=20
+        distance = face_recognition.face_distance([capture_encoding], liveliness_encoding)[0]
+        print(distance)
+        
+        percentage_match = (1 - distance) * 100
+        print(percentage_match)
+    
 
-        if matches[0]:
-            verification_status = "Verified"
+        if percentage_match > 50:
+            verification_status = "Verification Successful"
         else:
-            verification_status = "Not Verified"
-    except IndexError:
-        if len(face_recognition.face_encodings(img1)) == 0:
-            verification_status = "No face found in the captured image"
-        elif len(face_recognition.face_encodings(img2)) == 0:
-            verification_status = "No face found in the liveliness image"
+            verification_status = "Verification Failed"
+    else:
+        verification_status = "Images not available for comparison"
 
-    return redirect(url_for('index'))
-
-@app.route('/check_verification_status')
-def check_verification_status():
-    global verification_status
-    if verification_status is not None:
-        return jsonify({"redirect": True, "url": url_for('index')})
-    return jsonify({"redirect": False})
+    return redirect('/')
 
 @app.route('/clear')
 def clear():
-    global verification_status, captured_images, percentage_match
+    global captured_images, verification_status, percentage_match, stop_video_feed, blink_verified, hand_verified, head_movement_verified
     captured_images = {'capture': None, 'liveliness': None}
     verification_status = None
     percentage_match = None
+    stop_video_feed = False
+    blink_verified = False
+    hand_verified = False
+    head_movement_verified = False
     reset_video_capture()
-    return redirect(url_for('index'))
+    return redirect('/')
+
+@app.route('/reset', methods=['POST'])
+def reset():
+    global current_instruction, status, stop_video_feed, blink_verified, hand_verified, head_movement_verified
+    stop_video_feed = False
+    blink_verified = False
+    hand_verified = False
+    head_movement_verified = False
+    current_instruction = "Please blink your eyes."
+    status = "Awaiting action"
+    return jsonify({'success': True})
+
+@app.route('/check_verification_status')
+def check_verification_status():
+    global stop_video_feed
+    if stop_video_feed:
+        return jsonify({'redirect': True, 'url': url_for('index')})
+    return jsonify({'redirect': False})
 
 if __name__ == '__main__':
     app.run(debug=True)
